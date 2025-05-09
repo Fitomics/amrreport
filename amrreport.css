@@ -1,0 +1,121 @@
+      .csv-container {
+        margin-top: 30px;
+        padding: 20px;
+        background-color: #f9f9f9;
+        border-radius: 8px;
+      }
+
+      .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 25px;
+        text-align: center;
+        margin: 20px 0;
+        transition: background-color 0.3s;
+      }
+
+      .drop-zone.dragover {
+        background-color: #e9e9e9;
+        border-color: #999;
+      }
+
+      .status-message {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+        display: none;
+      }
+
+      .status-message.success {
+        background-color: #d4edda;
+        color: #155724;
+      }
+
+      .status-message.error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+
+      button#process-csv-btn:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+
+      button#process-csv-btn.processed {
+        background-color: #4caf50;
+        cursor: not-allowed;
+        opacity: 0.8;
+      }
+
+      .csv-preview {
+        margin-top: 20px;
+        overflow-x: auto;
+      }
+
+      .csv-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+
+      .csv-table th {
+        background-color: #f2f2f2;
+      }
+
+      .csv-table tr:nth-child(even) {
+        background-color: #f9f9f9;
+      }
+
+      .preview-info {
+        margin-bottom: 10px;
+        font-style: italic;
+        color: #666;
+      }
+
+      /* Analysis tables styling */
+      .csv-analysis {
+        margin-top: 40px;
+        border-top: 1px solid #ddd;
+        padding-top: 20px;
+      }
+
+      .analysis-container {
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+      }
+
+      .analysis-tables {
+        margin-bottom: 20px;
+        overflow-x: auto;
+      }
+
+      .analysis-table {
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      .analysis-table th,
+      .analysis-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: center;
+      }
+
+      .analysis-table th {
+        background-color: #f2f2f2;
+      }
+
+      .analysis-table tr:nth-child(even) {
+        background-color: #f9f9f9;
+      }
+
+      .analysis-table td[rowspan] {
+        background-color: #e9f7e9;
+      }
+
+      .csv-analysis h4 {
+        text-align: center;
+        margin: 15px 0;
+        color: #333;
+      }

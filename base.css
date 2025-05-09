@@ -1,0 +1,112 @@
+/* --- Global Styles & Fonts --- */
+@import url('https://fonts.googleapis.com/css2?family=Glacial+Indifference&display=swap');
+
+/* Color system */
+:root {
+  --primary-color: #003b59;
+  --secondary-color: #c19962;
+  --secondary-light: #fdf6ec;
+  --text-color: #00263d;
+  --border-color: #c19962;
+  --white: #ffffff;
+  --shadow-color: rgba(0, 38, 61, 0.08);
+}
+
+/* Global reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Glacial Indifference', sans-serif;
+  margin: 0;
+  padding: 20px;
+  background-color: var(--white);
+  color: var(--text-color);
+  line-height: 1.6;
+  letter-spacing: 0.3px;
+}
+
+/* Typography basics */
+h1, h2, h3, h4, .title-text, .page-title {
+  color: var(--primary-color);
+  font-weight: 700;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+/* Form elements */
+input, select, textarea {
+  font-family: 'Glacial Indifference', sans-serif;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.5rem;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--secondary-color);
+  outline: none;
+  box-shadow: 0 0 5px rgba(193, 153, 98, 0.3);
+}
+
+/* Button and interactive elements */
+button, .btn, .nav-button, .return-link {
+  font-family: 'Glacial Indifference', sans-serif;
+  background-color: var(--secondary-color);
+  color: var(--white);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 8px 15px;
+  transition: background-color 0.2s ease;
+}
+
+button:hover, .btn:hover, .nav-button:hover, .return-link:hover {
+  background-color: #a98451;
+}
+
+.small-button {
+  padding: 2px 8px;
+  margin-left: 5px;
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.small-button:hover {
+  background-color: #e0e0e0;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th, td {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+}
+
+th {
+  background-color: var(--secondary-light);
+  font-weight: bold;
+}
+
+/* Input states */
+.input-empty {
+  background-color: #e0f7ff;
+}
+
+.calc-unavailable {
+  background-color: #ffcccc;
+}
+
+.calc-available {
+  background-color: var(--white);
+}
