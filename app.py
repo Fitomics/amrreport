@@ -47,7 +47,7 @@ def init_db():
 @app.route('/')
 def index():
     """Serve the main AMR report page."""
-    return render_template('amr.html')
+    return render_template('index.html')
 
 @app.route('/<path:filename>')
 def serve_static(filename):

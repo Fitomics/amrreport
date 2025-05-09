@@ -1,4 +1,4 @@
-      .csv-container {
+.csv-container {
         margin-top: 30px;
         padding: 20px;
         background-color: #f9f9f9;
@@ -81,8 +81,18 @@
 
       .analysis-container {
         display: flex;
-        flex-direction: column;
-        gap: 30px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        margin-top: 20px;
+        margin-bottom: 20px;
+        gap: 20px;
+      }
+
+      .analysis-table-container {
+        flex: 1;
+        min-width: 300px;
+        max-width: 48%;
       }
 
       .analysis-tables {
@@ -91,31 +101,99 @@
       }
 
       .analysis-table {
-        max-width: 600px;
-        margin: 0 auto;
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 15px;
       }
 
-      .analysis-table th,
-      .analysis-table td {
-        border: 1px solid #ddd;
-        padding: 8px;
+      .analysis-container h4 {
+        margin-top: 5px;
+        margin-bottom: 10px;
+        color: #333;
         text-align: center;
-      }
-
-      .analysis-table th {
-        background-color: #f2f2f2;
-      }
-
-      .analysis-table tr:nth-child(even) {
-        background-color: #f9f9f9;
-      }
-
-      .analysis-table td[rowspan] {
-        background-color: #e9f7e9;
       }
 
       .csv-analysis h4 {
         text-align: center;
         margin: 15px 0;
         color: #333;
+      }
+
+      /* Make sure the tables don't appear in the CSV preview */
+      .csv-preview .csv-analysis {
+        display: none !important;
+      }
+
+      /* Zone table styles - this will be our reference */
+      .zone-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 15px;
+      }
+
+      .zone-table th, 
+      .zone-table td {
+        border: 1px solid #c19962;
+        padding: 8px;
+        text-align: center;
+      }
+
+      .zone-table th {
+        background-color: #fdf6ec;  /* Keep the light gold background */
+        color: var(--text-color);   /* Match your main text color */
+      }
+
+      .zone-display h5 {
+        color: var(--text-color);
+        font-size: 1.1em;
+        margin-bottom: 8px;
+        text-align: center;
+      }
+
+      /* Analysis tables in the metabolic report - completely match zone table styles */
+      .metabolic-report .analysis-container {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        margin-top: 20px;
+        margin-bottom: 20px;
+        gap: 20px;
+      }
+
+      .metabolic-report .analysis-table-container {
+        flex: 1;
+        min-width: 300px;
+        max-width: 48%;
+      }
+
+      .metabolic-report .analysis-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 15px;
+      }
+
+      .metabolic-report .analysis-table th, 
+      .metabolic-report .analysis-table td {
+        border: 1px solid #c19962;
+        padding: 8px;
+        text-align: center;
+      }
+
+      .metabolic-report .analysis-table th {
+        background-color: #fdf6ec;  /* Match the zone table background */
+        color: var(--text-color);   /* Match your main text color */
+      }
+
+      .metabolic-report .analysis-table tr,
+      .metabolic-report .analysis-table tr:nth-child(even),
+      .metabolic-report .analysis-table tr:nth-child(odd) {
+        background-color: #ffffff;
+      }
+
+      .metabolic-report .analysis-container h5 {
+        color: #c19962;
+        font-size: 1.1em;
+        margin-bottom: 8px;
+        text-align: center;
       }

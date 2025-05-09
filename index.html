@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>VO₂ Max Report</title>
+
+    <!-- Google Font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Glacial+Indifference&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Your CSS -->
+    <link href="base.css" rel="stylesheet" />
+    <link href="amrreport.css" rel="stylesheet" />
+
+    <!-- PDF libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  </head>
+
+  <body>
+    <div id="container">
+      <div id="header">
+        <h1>VO₂ Max Report</h1>
+      </div>
+
+      <div id="content">
+        <!-- Personal Information -->
+        <div class="personal-info">
+          <h3>Personal Information</h3>
+          <div class="input-group">
+            <label for="test-date">Test Date:</label>
+            <input type="date" id="test-date" />
+          </div>
+          <div class="input-group">
+            <label for="first-name">First Name:</label>
+            <input type="text" id="first-name" placeholder="First name" />
+          </div>
+          <div class="input-group">
+            <label for="last-name">Last Name:</label>
+            <input type="text" id="last-name" placeholder="Last name" />
+          </div>
+          <div class="input-group">
+            <label for="age">Age:</label>
+            <input type="number" id="age" placeholder="Age (years)" min="0" />
+          </div>
+          <div class="input-group">
+            <label for="gender">Gender:</label>
+            <select id="gender">
+              <option value="MALE">Male</option>
+              <option value="FEMALE">Female</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="weight-lbs">Weight (lbs):</label>
+            <input
+              type="number"
+              id="weight-lbs"
+              placeholder="Weight in pounds"
+              min="0"
+              step="0.1"
+            />
+          </div>
+          <div class="input-group">
+            <label for="weight-kg">Weight (kg):</label>
+            <input
+              type="number"
+              id="weight-kg"
+              placeholder="Weight in kilograms"
+              min="0"
+              step="0.01"
+              readonly
+            />
+          </div>
+        </div>
+
+        <!-- Metabolic Data -->
+        <div id="metabolic-data-section">
+          <h3>Exercise Metabolic Data</h3>
+
+          <div class="data-group">
+            <h4>VO₂ Max Measurements</h4>
+            <div class="input-group">
+              <label for="vo2-mets">VO₂ Max (METs):</label>
+              <input type="number" id="vo2-mets" step="0.1" min="0" />
+            </div>
+            <div class="input-group">
+              <label for="vo2-ml">VO₂ Max (ml/kg/min):</label>
+              <input type="number" id="vo2-ml" step="0.1" min="0" />
+            </div>
+            <div class="input-group">
+              <label for="max-hr">Max HR:</label>
+              <input type="number" id="max-hr" step="1" min="0" />
+            </div>
+            <div class="input-group">
+              <label for="min-hr">Min HR:</label>
+              <input type="number" id="min-hr" step="1" min="0" />
+            </div>
+          </div>
+
+          <div class="data-group">
+            <h4>Fat Max</h4>
+            <div class="input-group">
+              <label for="fat-max-grams">Max fat oxidation (g/min):</label>
+              <input type="number" id="fat-max-grams" step="0.01" min="0" />
+            </div>
+            <div class="input-group">
+              <label for="fat-max-hr">HR @ max fat ox (bpm):</label>
+              <input type="number" id="fat-max-hr" step="1" min="0" />
+            </div>
+          </div>
+
+          <div id="metabolic-summary" class="data-group">
+            <h4>Metabolic Summary Report</h4>
+            <div id="metabolic-report"></div>
+          </div>
+        </div>
+
+        <!-- CSV Processing -->
+        <div class="csv-container">
+          <h3>CSV File Processing</h3>
+          <div id="csv-drop-zone" class="drop-zone">
+            <p>Drop CSV file here or click to browse</p>
+          </div>
+          <div id="csv-status" class="status-message"></div>
+          <button id="process-csv-btn" disabled>
+            Process CSV (Remove Row #2)
+          </button>
+          <div id="csv-preview" class="csv-preview"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VO₂ Max Report Section -->
+    <div
+      id="amrVo2MaxReportPage"
+      class="page"
+      style="
+        display: none;
+        margin-top: 30px;
+        padding: 20px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      "
+    >
+      <div class="title-text">VO₂ Max Report (from AMR Data)</div>
+      <div class="graph-container">
+        <div class="chart-container" style="height: 300px; margin-bottom: 20px">
+          <canvas id="amrVo2CategoryChart"></canvas>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <tr>
+              <td>Estimated VO₂ Max (ml/kg/min)</td>
+              <td>
+                <input
+                  class="value-field"
+                  id="amrTableVo2Value"
+                  readonly
+                /><span class="unit-label"></span>
+              </td>
+            </tr>
+            <tr>
+              <td>Estimated VO₂ Max (METS)</td>
+              <td>
+                <input class="value-field" id="amrTableVo2Mets" readonly /><span
+                  class="unit-label"
+                ></span>
+              </td>
+            </tr>
+            <tr>
+              <td>Percentile</td>
+              <td>
+                <input
+                  class="value-field"
+                  id="amrTableVo2Percentile"
+                  readonly
+                /><span class="unit-label"></span>
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDF Download -->
+    <button id="download-pdf">Download PDF</button>
+    <div id="pdf-content" style="display: none"></div>
+
+    <!-- Main JavaScript -->
+    <script src="app.js"></script>
+  </body>
+</html>
