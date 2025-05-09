@@ -197,3 +197,35 @@
         margin-bottom: 8px;
         text-align: center;
       }
+
+      /* Center table titles and cell data in analysis tables */
+      .analysis-table-container h5 {
+        text-align: center;
+        margin-bottom: 12px;
+        font-weight: 600;
+      }
+
+      .analysis-table td,
+      .analysis-table th {
+        text-align: center;
+      }
+
+      /* Ensure consistent centering in the metabolic report tables */
+      #metabolic-report .analysis-table-container h5,
+      #metabolic-report .analysis-tables-container h5 {
+        text-align: center;
+      }
+
+      #metabolic-report .analysis-table td,
+      #metabolic-report .analysis-table th {
+        text-align: center;
+      }
+
+      /* Ensure consistent styling in both tables */
+      .analysis-container h5 {
+        text-align: center;
+        margin-top: 5px;
+        margin-bottom: 12px;
+        color: #333;
+        font-weight: 600;
+      }

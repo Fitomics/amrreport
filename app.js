@@ -346,20 +346,81 @@ class AMRCsvHandler {
       );
       return;
     }
+
+    // Verify we have sufficient data rows
+    if (this.csvData.length < 3) {
+      this.showStatus("CSV doesn't have enough rows to process", true);
+      return;
+    }
+
+    // Remove the second row (index 1)
+    console.log("Before removing row 2, rows:", this.csvData.length);
     this.csvData.splice(1, 1);
+    console.log("After removing row 2, rows:", this.csvData.length);
+
+    // Add computed columns and process data
     this.addComputedColumns();
+
+    // Find max HR FIRST (very important)
+    this.findMaxHR();
+
+    // Find Fat Max AFTER max HR is established
     this.findFatMax();
+
+    // Get the current max HR value from the UI
+    const maxHRInput = document.getElementById("max-hr");
+
+    if (!maxHRInput) {
+      console.error(
+        "Max HR input element not found. Element ID should be 'max-hr'."
+      );
+      this.showStatus("Error: Max HR input element not found", true);
+      return;
+    }
+
+    const maxHR = parseFloat(maxHRInput.value);
+
+    // Debug log the maxHR to verify it was found
+    console.log("Max HR input found:", maxHRInput);
+    console.log("Current Max HR value:", maxHR);
+
+    // Calculate HR zones explicitly, ensuring maxHR is valid
+    if (!isNaN(maxHR) && maxHR > 0) {
+      // Force zones calculation with the valid maxHR
+      hrZoneData.calculateHrRanges(maxHR);
+
+      // Debug log to verify zones were calculated
+      console.log("HR Zones calculated:", JSON.stringify(hrZoneData.zones));
+    } else {
+      // Show error if max HR is not set
+      this.showStatus("Max HR value is missing or invalid", true);
+      return;
+    }
+
+    // Now populate heart rate zones with data from the CSV
     this.populateHeartRateZones();
+
+    // Generate analysis tables
     this.generateAnalysisTables();
+
+    // Mark as processed
     this.csvProcessed = true;
+
     if (this.processBtn) {
       this.processBtn.innerHTML = "CSV Processed ✔";
       this.processBtn.disabled = true;
       this.processBtn.classList.add("processed");
     }
+
+    // Update status
     this.showStatus(
       `Row #2 removed, computed columns added, and zone metrics calculated. ${this.csvData.length} rows remaining.`
     );
+
+    // Force UI update
+    generateMetabolicReport();
+
+    // Show preview
     this.previewCSV(this.csvData);
   }
 
@@ -409,7 +470,10 @@ class AMRCsvHandler {
   }
 
   populateHeartRateZones() {
-    if (!this.csvData || this.csvData.length < 2) return;
+    if (!this.csvData || this.csvData.length < 2) {
+      console.warn("Not enough CSV data to populate heart rate zones");
+      return;
+    }
 
     const headerRow = this.csvData[0];
     const hrIndex = this.findColumnIndex(headerRow, ["hr", "heart", "bpm"]);
@@ -417,7 +481,26 @@ class AMRCsvHandler {
     const fatIndex = this.findColumnIndex(headerRow, ["fat", "fat%"]);
     const calIndex = this.findColumnIndex(headerRow, ["cal", "calories"]);
 
-    if (hrIndex === -1 || choIndex === -1 || fatIndex === -1) return;
+    if (hrIndex === -1 || choIndex === -1 || fatIndex === -1) {
+      console.warn("Missing required columns for zone population:", {
+        hrIndex,
+        choIndex,
+        fatIndex,
+      });
+      return;
+    }
+
+    // Make sure zones are properly initialized
+    const maxHR = parseFloat(document.getElementById("max-hr").value);
+    if (isNaN(maxHR) || maxHR <= 0) {
+      console.warn("Invalid max HR for zone population:", maxHR);
+      return;
+    }
+
+    // Double check that zones are calculated
+    if (hrZoneData.zones[0].lowerHr === 0) {
+      hrZoneData.calculateHrRanges(maxHR);
+    }
 
     // Reset zone data collections
     hrZoneData.zones.forEach((zone) => {
@@ -426,17 +509,27 @@ class AMRCsvHandler {
       zone.calValues = [];
     });
 
+    console.log(
+      "Processing CSV data for zone population, rows:",
+      this.csvData.length - 1
+    );
+
     // Process each data row
+    let zoneAssignments = 0;
     for (let i = 1; i < this.csvData.length; i++) {
       const row = this.csvData[i];
-      if (row.length <= Math.max(hrIndex, choIndex, fatIndex)) continue;
+      if (row.length <= Math.max(hrIndex, choIndex, fatIndex)) {
+        continue;
+      }
 
       const hr = parseFloat(row[hrIndex]);
       const cho = parseFloat(row[choIndex]);
       const fat = parseFloat(row[fatIndex]);
       const cal = calIndex !== -1 ? parseFloat(row[calIndex]) : null;
 
-      if (isNaN(hr) || isNaN(cho) || isNaN(fat)) continue;
+      if (isNaN(hr) || isNaN(cho) || isNaN(fat)) {
+        continue;
+      }
 
       // Add values to the appropriate zone
       hrZoneData.zones.forEach((zone) => {
@@ -448,9 +541,12 @@ class AMRCsvHandler {
           zone.choValues.push(cho);
           zone.fatValues.push(fat);
           if (cal !== null) zone.calValues.push(cal);
+          zoneAssignments++;
         }
       });
     }
+
+    console.log(`Assigned ${zoneAssignments} data points to HR zones`);
 
     // Calculate averages for each zone
     hrZoneData.zones.forEach((zone) => {
@@ -462,6 +558,14 @@ class AMRCsvHandler {
       zone.cho = Math.round(avg(zone.choValues) || 0);
       zone.fat = Math.round(avg(zone.fatValues) || 0);
       zone.cal = avg(zone.calValues)?.toFixed(1) || "";
+
+      console.log(
+        `Zone ${zone.zoneNum} (${zone.lowerHr}-${zone.upperHr}) - CHO: ${
+          zone.cho
+        }, FAT: ${zone.fat}, CAL: ${zone.cal}, points: ${
+          zone.choValues?.length || 0
+        }`
+      );
     });
 
     // Update the UI with new zone data
@@ -547,7 +651,7 @@ class AMRCsvHandler {
 
     let vo2Table = `
       <div class="analysis-table-container">
-        <h5>VO2 Analysis (${d.weightKg.toFixed(2)} kg)</h5>
+        <h5>VO2 Analysis</h5>
         <table class="analysis-table"><thead>
           <tr><th>VO₂ (ml/kg/min)</th><th>HR</th><th>Avg VO₂</th><th>Avg HR</th></tr>
         </thead><tbody>`;
@@ -811,67 +915,261 @@ const formManager = {
 document.getElementById("download-pdf").addEventListener("click", async () => {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "letter" });
-  // Title page
-  doc
-    .setFontSize(20)
-    .text("VO₂ Max Report", doc.internal.pageSize.getWidth() / 2, 90, {
-      align: "center",
-    });
-  doc
-    .setFontSize(12)
-    .text(
-      `Client: ${document.getElementById("first-name").value || ""} ${
-        document.getElementById("last-name").value || ""
-      }`,
-      40,
-      150
-    );
-  doc.text(
-    `Date: ${new Date(
-      document.getElementById("test-date").value
-    ).toLocaleDateString()}`,
-    40,
-    170
-  );
 
-  // VO₂ page
-  doc.addPage();
-  let y = 60;
-  doc.setFontSize(18).text("VO₂ Max", doc.internal.pageSize.getWidth() / 2, y, {
-    align: "center",
-  });
-  y += 30;
-  const canvas = document.getElementById("amrVo2CategoryChart");
-  if (canvas) {
-    const img = canvas.toDataURL("image/png", 1.0);
-    const pw = doc.internal.pageSize.getWidth() - 80;
-    const ph = (canvas.height * pw) / canvas.width;
-    const x = (doc.internal.pageSize.getWidth() - pw) / 2;
-    doc.addImage(img, "PNG", x, y, pw, ph);
-    y += ph + 20;
+  // Define page dimensions
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  // Make sure HR zones are calculated before generating PDF
+  const maxHR = parseFloat(document.getElementById("max-hr").value);
+  if (isNaN(maxHR) || maxHR <= 0) {
+    alert("Please enter a valid Max HR value before generating the PDF.");
+    return;
   }
-  const vo2Vals = [
-    [
-      "VO₂ Max (ml/kg/min)",
-      document.getElementById("amrTableVo2Value").value || "N/A",
-    ],
-    [
-      "VO₂ Max (METS)",
-      document.getElementById("amrTableVo2Mets").value || "N/A",
-    ],
-  ];
-  doc.autoTable({
-    head: [["Metric", "Value"]],
-    body: vo2Vals,
-    startY: y,
-    margin: { left: 40, right: 40 },
-    theme: "grid",
-  });
 
-  // Continue with HR zones, fat & VO₂ analysis...
-  // (You can expand similarly using autoTable and collectMetabolicData + AMRCsvHandler.analysisData)
+  // Make sure we have a resting HR value
+  const minHR = parseFloat(document.getElementById("min-hr").value) || 60;
 
-  doc.save(`VO2_Max_Report.pdf`);
+  // Force recalculation of HR zones to ensure they're properly populated
+  hrZoneData.calculateHrRanges(maxHR);
+
+  // Double-check that zones are actually calculated
+  if (hrZoneData.zones[0].lowerHr === 0 && hrZoneData.zones[0].upperHr === 0) {
+    // If zones are still not calculated, calculate them directly
+    hrZoneData.zones.forEach((zone) => {
+      zone.lowerHr = Math.round(maxHR * zone.lowerPercent);
+      zone.upperHr = Math.round(maxHR * zone.upperPercent);
+    });
+  }
+
+  // Add background image function
+  const addBackgroundImage = async () => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = "newbackground.png";
+      img.onload = () => {
+        doc.addImage(img, "PNG", 0, 0, pageWidth, pageHeight);
+        resolve();
+      };
+      // Fallback if image doesn't load
+      img.onerror = () => {
+        console.warn("Background image could not be loaded");
+        resolve();
+      };
+      // Set a timeout in case the image is taking too long
+      setTimeout(resolve, 2000);
+    });
+  };
+
+  try {
+    // Title page
+    await addBackgroundImage();
+
+    doc
+      .setFontSize(24)
+      .setTextColor("#333333")
+      .text("Fat Oxidation and Heart Rate Zones", pageWidth / 2, 150, {
+        align: "center",
+      });
+
+    doc
+      .setFontSize(14)
+      .text(
+        `Client: ${document.getElementById("first-name").value || ""} ${
+          document.getElementById("last-name").value || ""
+        }`,
+        pageWidth / 2,
+        200,
+        {
+          align: "center",
+        }
+      );
+
+    doc.text(
+      `Date: ${new Date(
+        document.getElementById("test-date").value || new Date()
+      ).toLocaleDateString()}`,
+      pageWidth / 2,
+      230,
+      {
+        align: "center",
+      }
+    );
+
+    // HR Zones page with background
+    doc.addPage();
+    await addBackgroundImage();
+
+    // Title for HR Zones
+    doc
+      .setFontSize(18)
+      .setTextColor("#333333")
+      .text("HR Training Zones", pageWidth / 2, 100, {
+        align: "center",
+      });
+
+    // Create HR zones table with guaranteed values
+    const zoneHeaders = [
+      ["Zone", "Heart Rate Range", "CHO %", "FAT %", "Cal/min"],
+    ];
+    const zoneRows = hrZoneData.zones.map((zone) => [
+      `Zone ${zone.zoneNum}`,
+      `${zone.lowerHr}-${zone.upperHr}`,
+      zone.cho || "N/A",
+      zone.fat || "0",
+      zone.cal || "N/A",
+    ]);
+
+    // Apply custom styling to match page CSS
+    doc.autoTable({
+      head: zoneHeaders,
+      body: zoneRows,
+      startY: 130,
+      margin: { left: 80, right: 80 },
+      styles: {
+        textColor: [51, 51, 51],
+        fontSize: 12,
+        cellPadding: 8,
+      },
+      headStyles: {
+        fillColor: [253, 246, 236],
+        textColor: [51, 51, 51],
+        fontStyle: "bold",
+      },
+      columnStyles: {
+        0: { cellWidth: "auto" },
+        1: { cellWidth: "auto" },
+        2: { cellWidth: "auto" },
+        3: { cellWidth: "auto" },
+        4: { cellWidth: "auto" },
+      },
+      didDrawCell: (data) => {
+        // Add cell borders
+        if (data.section === "body" || data.section === "head") {
+          const { x, y, width, height } = data.cell;
+          doc.setDrawColor(193, 153, 98); // #c19962
+          doc.setLineWidth(0.5);
+          doc.rect(x, y, width, height);
+        }
+      },
+    });
+
+    // Show Fat Max information
+    doc.setFontSize(16);
+    doc.text("Fat Max Data", pageWidth / 2, 310, { align: "center" });
+
+    doc.setFontSize(12);
+    const fatMaxGrams = document.getElementById("fat-max-grams").value || "N/A";
+    const fatMaxHr = document.getElementById("fat-max-hr").value || "N/A";
+
+    doc.text(
+      `Max Fat Oxidation: ${fatMaxGrams} g/min @ ${fatMaxHr} bpm`,
+      pageWidth / 2,
+      340,
+      {
+        align: "center",
+      }
+    );
+
+    // Add client information and other analysis if available
+    if (window.AMRCsvHandler && window.AMRCsvHandler.analysisData) {
+      // Analysis tables page with background
+      doc.addPage();
+      await addBackgroundImage();
+
+      // Title for Analysis page
+      doc
+        .setFontSize(18)
+        .setTextColor("#333333")
+        .text("Metabolic Analysis", pageWidth / 2, 100, {
+          align: "center",
+        });
+
+      const analysisData = window.AMRCsvHandler.analysisData;
+
+      // Add VO2 Analysis Table
+      if (analysisData.topVo2 && analysisData.topVo2.length) {
+        const vo2Headers = [["VO₂ (ml/kg/min)", "HR", "Avg VO₂", "Avg HR"]];
+        const vo2Rows = analysisData.topVo2.map((row, i) => {
+          const baseRow = [
+            typeof row.vo2 === "number" ? row.vo2.toFixed(1) : "-",
+            typeof row.hr === "number" ? row.hr.toFixed(0) : "-",
+          ];
+
+          if (i === 0) {
+            baseRow.push(analysisData.avgVo2, analysisData.avgVo2Hr);
+          } else {
+            baseRow.push("", "");
+          }
+
+          return baseRow;
+        });
+
+        doc.text("VO₂ Analysis", pageWidth / 2, 140, { align: "center" });
+
+        doc.autoTable({
+          head: vo2Headers,
+          body: vo2Rows,
+          startY: 150,
+          margin: { left: 80, right: 80 },
+          styles: {
+            textColor: [51, 51, 51],
+            fontSize: 11,
+          },
+          headStyles: {
+            fillColor: [253, 246, 236],
+            textColor: [51, 51, 51],
+          },
+        });
+      }
+
+      // Add Fat Oxidation Analysis Table
+      if (analysisData.topFat && analysisData.topFat.length) {
+        const fatHeaders = [["HR", "Fat (g/min)", "Avg HR", "Avg Fat"]];
+        const fatRows = analysisData.topFat.map((row, i) => {
+          const baseRow = [
+            typeof row.hr === "number" ? row.hr : "-",
+            typeof row.fatGMin === "number" ? row.fatGMin.toFixed(2) : "-",
+          ];
+
+          if (i === 0) {
+            baseRow.push(analysisData.avgFatHr, analysisData.avgFatGMin);
+          } else {
+            baseRow.push("", "");
+          }
+
+          return baseRow;
+        });
+
+        doc.text("Fat Oxidation Analysis", pageWidth / 2, 320, {
+          align: "center",
+        });
+
+        doc.autoTable({
+          head: fatHeaders,
+          body: fatRows,
+          startY: 330,
+          margin: { left: 80, right: 80 },
+          styles: {
+            textColor: [51, 51, 51],
+            fontSize: 11,
+          },
+          headStyles: {
+            fillColor: [253, 246, 236],
+            textColor: [51, 51, 51],
+          },
+        });
+      }
+    }
+
+    // Save the PDF
+    const firstName = document.getElementById("first-name").value || "Client";
+    const lastName = document.getElementById("last-name").value || "Report";
+    doc.save(`${firstName}_${lastName}_Metabolic_Report.pdf`);
+  } catch (error) {
+    console.error("PDF generation error:", error);
+    alert("Error generating PDF: " + error.message);
+  }
 });
 
 // Store zone data in a JS object instead of hidden DOM inputs
