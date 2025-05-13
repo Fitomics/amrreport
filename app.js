@@ -1288,8 +1288,8 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
         const fatTableEndY = doc.previousAutoTable.finalY + 20;
 
         // Second table for average fat values
-        const avgFatHeaders = [["Avg HR", "Avg Fat"]];
-        const avgFatRows = [[analysisData.avgFatHr, analysisData.avgFatGMin]];
+        const avgFatHeaders = [["Avg Fat", "Avg HR"]];
+        const avgFatRows = [[analysisData.avgFatGMin, analysisData.avgFatHr]];
 
         doc.autoTable({
           head: avgFatHeaders,
