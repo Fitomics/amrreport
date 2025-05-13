@@ -911,16 +911,65 @@ const formManager = {
   },
 };
 
+// 1. Helper to turn an ArrayBuffer into a Base64 string
+function arrayBufferToBase64(buffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  for (let b of bytes) binary += String.fromCharCode(b);
+  return window.btoa(binary);
+}
+
+async function registerGlacialFont(doc) {
+  try {
+    // Use a local font file instead of remote URL
+    const fontUrl = "./fonts/GlacialIndifference-Regular.ttf";
+
+    const resp = await fetch(fontUrl);
+    const buffer = await resp.arrayBuffer();
+    const base64 = arrayBufferToBase64(buffer);
+
+    doc.addFileToVFS("GlacialIndifference-Regular.ttf", base64);
+    doc.addFont(
+      "GlacialIndifference-Regular.ttf",
+      "GlacialIndifference",
+      "normal"
+    );
+  } catch (error) {
+    console.error("Error loading font:", error);
+    // Fallback to a standard font
+    doc.setFont("helvetica", "normal");
+  }
+}
+
 // PDF download logic
 document.getElementById("download-pdf").addEventListener("click", async () => {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "letter" });
+  await registerGlacialFont(doc);
 
   // Define page dimensions
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
+  const centerY = pageHeight / 2;
 
-  // Make sure HR zones are calculated before generating PDF
+  // Define addBackgroundImage function first
+  const addBackgroundImage = async () => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = "newbackground.png";
+      img.onload = () => {
+        doc.addImage(img, "PNG", 0, 0, pageWidth, pageHeight);
+        resolve();
+      };
+      img.onerror = () => {
+        console.warn("Background image could not be loaded");
+        resolve();
+      };
+      setTimeout(resolve, 2000);
+    });
+  };
+
+  // Validate inputs
   const maxHR = parseFloat(document.getElementById("max-hr").value);
   if (isNaN(maxHR) || maxHR <= 0) {
     alert("Please enter a valid Max HR value before generating the PDF.");
@@ -930,56 +979,37 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
   // Make sure we have a resting HR value
   const minHR = parseFloat(document.getElementById("min-hr").value) || 60;
 
-  // Force recalculation of HR zones to ensure they're properly populated
+  // Force recalculation of HR zones
   hrZoneData.calculateHrRanges(maxHR);
 
-  // Double-check that zones are actually calculated
+  // Double-check zones calculation
   if (hrZoneData.zones[0].lowerHr === 0 && hrZoneData.zones[0].upperHr === 0) {
-    // If zones are still not calculated, calculate them directly
     hrZoneData.zones.forEach((zone) => {
       zone.lowerHr = Math.round(maxHR * zone.lowerPercent);
       zone.upperHr = Math.round(maxHR * zone.upperPercent);
     });
   }
 
-  // Add background image function
-  const addBackgroundImage = async () => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = "newbackground.png";
-      img.onload = () => {
-        doc.addImage(img, "PNG", 0, 0, pageWidth, pageHeight);
-        resolve();
-      };
-      // Fallback if image doesn't load
-      img.onerror = () => {
-        console.warn("Background image could not be loaded");
-        resolve();
-      };
-      // Set a timeout in case the image is taking too long
-      setTimeout(resolve, 2000);
-    });
-  };
-
   try {
     // Title page
     await addBackgroundImage();
-
     doc
+      .setFont("GlacialIndifference", "normal")
       .setFontSize(24)
       .setTextColor("#333333")
-      .text("Fat Oxidation and Heart Rate Zones", pageWidth / 2, 150, {
+      .text("Heart Rate Zones and Fat Max", pageWidth / 2, centerY - 20, {
         align: "center",
       });
 
     doc
+      .setFont("GlacialIndifference", "normal")
       .setFontSize(14)
       .text(
         `Client: ${document.getElementById("first-name").value || ""} ${
           document.getElementById("last-name").value || ""
         }`,
         pageWidth / 2,
-        200,
+        centerY + 30,
         {
           align: "center",
         }
@@ -990,7 +1020,7 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
         document.getElementById("test-date").value || new Date()
       ).toLocaleDateString()}`,
       pageWidth / 2,
-      230,
+      centerY + 50,
       {
         align: "center",
       }
@@ -1002,6 +1032,7 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
 
     // Title for HR Zones
     doc
+      .setFont("GlacialIndifference", "normal")
       .setFontSize(18)
       .setTextColor("#333333")
       .text("HR Training Zones", pageWidth / 2, 100, {
@@ -1055,21 +1086,46 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
     });
 
     // Show Fat Max information
-    doc.setFontSize(16);
-    doc.text("Fat Max Data", pageWidth / 2, 310, { align: "center" });
-
     doc.setFontSize(12);
     const fatMaxGrams = document.getElementById("fat-max-grams").value || "N/A";
     const fatMaxHr = document.getElementById("fat-max-hr").value || "N/A";
 
-    doc.text(
-      `Max Fat Oxidation: ${fatMaxGrams} g/min @ ${fatMaxHr} bpm`,
-      pageWidth / 2,
-      340,
-      {
-        align: "center",
-      }
-    );
+    // Create a table for Fat Max data instead of a single text line
+    const fatMaxHeaders = [["Fat Max Data"]];
+    const fatMaxRows = [
+      [`Max Fat Oxidation: ${fatMaxGrams} g/min @ ${fatMaxHr} bpm`],
+    ];
+
+    doc.autoTable({
+      head: fatMaxHeaders,
+      body: fatMaxRows,
+      startY: 340, // Moved down to match the new title position
+      margin: { left: 80, right: 80 },
+      styles: {
+        textColor: [51, 51, 51],
+        fontSize: 12,
+        cellPadding: 8,
+        halign: "center",
+      },
+      headStyles: {
+        fillColor: [253, 246, 236],
+        textColor: [51, 51, 51],
+        fontStyle: "bold",
+        halign: "center",
+      },
+      columnStyles: {
+        0: { cellWidth: "auto" },
+      },
+      didDrawCell: (data) => {
+        // Add cell borders
+        if (data.section === "body" || data.section === "head") {
+          const { x, y, width, height } = data.cell;
+          doc.setDrawColor(193, 153, 98); // #c19962
+          doc.setLineWidth(0.5);
+          doc.rect(x, y, width, height);
+        }
+      },
+    });
 
     // Add client information and other analysis if available
     if (window.AMRCsvHandler && window.AMRCsvHandler.analysisData) {
@@ -1077,19 +1133,11 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
       doc.addPage();
       await addBackgroundImage();
 
-      // Title for Analysis page
-      doc
-        .setFontSize(18)
-        .setTextColor("#333333")
-        .text("Metabolic Analysis", pageWidth / 2, 100, {
-          align: "center",
-        });
-
       const analysisData = window.AMRCsvHandler.analysisData;
 
       // Add VO2 Analysis Table
       if (analysisData.topVo2 && analysisData.topVo2.length) {
-        const vo2Headers = [["VO₂ (ml/kg/min)", "HR", "Avg VO₂", "Avg HR"]];
+        const vo2Headers = [["VO2 (ml/kg/min)", "HR", "Avg VO2 Max", "Avg HR"]];
         const vo2Rows = analysisData.topVo2.map((row, i) => {
           const baseRow = [
             typeof row.vo2 === "number" ? row.vo2.toFixed(1) : "-",
@@ -1104,21 +1152,34 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
 
           return baseRow;
         });
-
-        doc.text("VO₂ Analysis", pageWidth / 2, 140, { align: "center" });
+        doc.setFontSize(18);
+        doc.setTextColor("#333333");
+        doc.setFont("GlacialIndifference", "normal");
+        doc.text("VO2 Analysis", pageWidth / 2, 100, { align: "center" });
 
         doc.autoTable({
           head: vo2Headers,
           body: vo2Rows,
-          startY: 150,
+          startY: 120,
           margin: { left: 80, right: 80 },
           styles: {
             textColor: [51, 51, 51],
-            fontSize: 11,
+            fontSize: 12,
+            cellPadding: 8,
           },
           headStyles: {
             fillColor: [253, 246, 236],
             textColor: [51, 51, 51],
+            fontStyle: "bold",
+          },
+          didDrawCell: (data) => {
+            // Add cell borders
+            if (data.section === "body" || data.section === "head") {
+              const { x, y, width, height } = data.cell;
+              doc.setDrawColor(193, 153, 98); // #c19962
+              doc.setLineWidth(0.5);
+              doc.rect(x, y, width, height);
+            }
           },
         });
       }
@@ -1141,22 +1202,36 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
           return baseRow;
         });
 
-        doc.text("Fat Oxidation Analysis", pageWidth / 2, 320, {
+        doc.setFontSize(18);
+        doc.setTextColor("#333333");
+        doc.setFont("GlacialIndifference", "normal");
+        doc.text("Fat Oxidation Analysis", pageWidth / 2, 340, {
           align: "center",
         });
 
         doc.autoTable({
           head: fatHeaders,
           body: fatRows,
-          startY: 330,
+          startY: 350,
           margin: { left: 80, right: 80 },
           styles: {
             textColor: [51, 51, 51],
-            fontSize: 11,
+            fontSize: 12,
+            cellPadding: 8,
           },
           headStyles: {
             fillColor: [253, 246, 236],
             textColor: [51, 51, 51],
+            fontStyle: "bold",
+          },
+          didDrawCell: (data) => {
+            // Add cell borders
+            if (data.section === "body" || data.section === "head") {
+              const { x, y, width, height } = data.cell;
+              doc.setDrawColor(193, 153, 98); // #c19962
+              doc.setLineWidth(0.5);
+              doc.rect(x, y, width, height);
+            }
           },
         });
       }
@@ -1278,29 +1353,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // CSV handler
   if (window.AMRCsvHandler) window.AMRCsvHandler.init();
-
-  // add HR-calc button
-  const metabolicSection = document.getElementById("metabolic-data-section");
-  if (metabolicSection) {
-    const recalc = document.createElement("button");
-    recalc.id = "calculate-zones";
-    recalc.className = "action-button";
-    recalc.textContent = "Calculate HR Zones";
-    recalc.addEventListener("click", () => {
-      calculateHRZones();
-      alert("Heart rate zones have been calculated!");
-    });
-    const group = metabolicSection.querySelector(".data-group");
-    if (group) {
-      group.appendChild(recalc);
-      const p = document.createElement("p");
-      p.innerHTML =
-        "Enter Max HR value to automatically calculate training zones.<br>You can adjust the calculated values if needed.";
-      p.style.cssText =
-        "font-size:.9em;font-style:italic;color:#666;margin-top:10px";
-      group.appendChild(p);
-    }
-  }
 
   // form auto-load
   formManager.loadFormData();
