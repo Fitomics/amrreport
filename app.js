@@ -1135,42 +1135,90 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
 
       const analysisData = window.AMRCsvHandler.analysisData;
 
+      // Define page and table dimensions ONCE for the entire page
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const tableWidth = pageWidth - 160; // 80px margin on each side
+      const columnWidth = tableWidth / 2; // Equal width for each column
+
       // Add VO2 Analysis Table
       if (analysisData.topVo2 && analysisData.topVo2.length) {
-        const vo2Headers = [["VO2 (ml/kg/min)", "HR", "Avg VO2 Max", "Avg HR"]];
-        const vo2Rows = analysisData.topVo2.map((row, i) => {
-          const baseRow = [
-            typeof row.vo2 === "number" ? row.vo2.toFixed(1) : "-",
-            typeof row.hr === "number" ? row.hr.toFixed(0) : "-",
-          ];
+        // Main VO2 Analysis table with just the data points
+        const vo2Headers = [["VO2 (ml/kg/min)", "HR"]];
+        const vo2Rows = analysisData.topVo2.map((row) => [
+          typeof row.vo2 === "number" ? row.vo2.toFixed(1) : "-",
+          typeof row.hr === "number" ? row.hr.toFixed(0) : "-",
+        ]);
 
-          if (i === 0) {
-            baseRow.push(analysisData.avgVo2, analysisData.avgVo2Hr);
-          } else {
-            baseRow.push("", "");
-          }
-
-          return baseRow;
-        });
         doc.setFontSize(18);
         doc.setTextColor("#333333");
         doc.setFont("GlacialIndifference", "normal");
-        doc.text("VO2 Analysis", pageWidth / 2, 100, { align: "center" });
+        doc.text("VO2 Analysis", pageWidth / 2, 80, { align: "center" });
 
+        // First table uses the shared dimensions
         doc.autoTable({
           head: vo2Headers,
           body: vo2Rows,
-          startY: 120,
+          startY: 95,
           margin: { left: 80, right: 80 },
           styles: {
             textColor: [51, 51, 51],
             fontSize: 12,
             cellPadding: 8,
+            halign: "center",
+            valign: "middle",
           },
           headStyles: {
             fillColor: [253, 246, 236],
             textColor: [51, 51, 51],
             fontStyle: "bold",
+            halign: "center",
+            valign: "middle",
+          },
+          columnStyles: {
+            0: { cellWidth: columnWidth },
+            1: { cellWidth: columnWidth },
+          },
+          didDrawCell: (data) => {
+            // Add cell borders
+            if (data.section === "body" || data.section === "head") {
+              const { x, y, width, height } = data.cell;
+              doc.setDrawColor(193, 153, 98); // #c19962
+              doc.setLineWidth(0.5);
+              doc.rect(x, y, width, height);
+            }
+          },
+        });
+
+        // Get the final Y position of the first table
+        const firstTableEndY = doc.previousAutoTable.finalY + 15;
+
+        // Second table for average values
+        const avgHeaders = [["Avg VO2 Max", "Avg HR"]];
+        const avgRows = [[analysisData.avgVo2, analysisData.avgVo2Hr]];
+
+        // Second table also uses the same dimensions
+        doc.autoTable({
+          head: avgHeaders,
+          body: avgRows,
+          startY: firstTableEndY,
+          margin: { left: 80, right: 80 },
+          styles: {
+            textColor: [51, 51, 51],
+            fontSize: 12,
+            cellPadding: 8,
+            halign: "center",
+            valign: "middle",
+          },
+          headStyles: {
+            fillColor: [253, 246, 236],
+            textColor: [51, 51, 51],
+            fontStyle: "bold",
+            halign: "center",
+            valign: "middle",
+          },
+          columnStyles: {
+            0: { cellWidth: columnWidth },
+            1: { cellWidth: columnWidth },
           },
           didDrawCell: (data) => {
             // Add cell borders
@@ -1184,45 +1232,83 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
         });
       }
 
-      // Add Fat Oxidation Analysis Table
+      // Add Fat Oxidation Analysis Table - already has access to the same dimensions
       if (analysisData.topFat && analysisData.topFat.length) {
-        const fatHeaders = [["HR", "Fat (g/min)", "Avg HR", "Avg Fat"]];
-        const fatRows = analysisData.topFat.map((row, i) => {
-          const baseRow = [
-            typeof row.hr === "number" ? row.hr : "-",
-            typeof row.fatGMin === "number" ? row.fatGMin.toFixed(2) : "-",
-          ];
-
-          if (i === 0) {
-            baseRow.push(analysisData.avgFatHr, analysisData.avgFatGMin);
-          } else {
-            baseRow.push("", "");
-          }
-
-          return baseRow;
-        });
+        // Main Fat Oxidation analysis table with just the data points
+        const fatHeaders = [["Fat (g/min)", "HR"]];
+        const fatRows = analysisData.topFat.map((row) => [
+          typeof row.fatGMin === "number" ? row.fatGMin.toFixed(2) : "-",
+          typeof row.hr === "number" ? row.hr : "-",
+        ]);
 
         doc.setFontSize(18);
         doc.setTextColor("#333333");
         doc.setFont("GlacialIndifference", "normal");
-        doc.text("Fat Oxidation Analysis", pageWidth / 2, 340, {
+        doc.text("Fat Oxidation Analysis", pageWidth / 2, 390, {
           align: "center",
         });
+
+        // Calculate column widths for consistent size
 
         doc.autoTable({
           head: fatHeaders,
           body: fatRows,
-          startY: 350,
+          startY: 400,
           margin: { left: 80, right: 80 },
           styles: {
             textColor: [51, 51, 51],
             fontSize: 12,
             cellPadding: 8,
+            halign: "center",
+            valign: "middle",
           },
           headStyles: {
             fillColor: [253, 246, 236],
             textColor: [51, 51, 51],
             fontStyle: "bold",
+            halign: "center",
+            valign: "middle",
+          },
+          columnStyles: {
+            0: { cellWidth: columnWidth },
+            1: { cellWidth: columnWidth },
+          },
+          didDrawCell: (data) => {
+            // Add cell borders
+            if (data.section === "body" || data.section === "head") {
+              const { x, y, width, height } = data.cell;
+              doc.setDrawColor(193, 153, 98); // #c19962
+              doc.setLineWidth(0.5);
+              doc.rect(x, y, width, height);
+            }
+          },
+        });
+
+        // Get the final Y position of the fat table
+        const fatTableEndY = doc.previousAutoTable.finalY + 20;
+
+        // Second table for average fat values
+        const avgFatHeaders = [["Avg HR", "Avg Fat"]];
+        const avgFatRows = [[analysisData.avgFatHr, analysisData.avgFatGMin]];
+
+        doc.autoTable({
+          head: avgFatHeaders,
+          body: avgFatRows,
+          startY: fatTableEndY, // Position it 20 points below the fat table
+          margin: { left: 80, right: 80 },
+          styles: {
+            textColor: [51, 51, 51],
+            fontSize: 12,
+            cellPadding: 8,
+            halign: "center",
+            valign: "middle",
+          },
+          headStyles: {
+            fillColor: [253, 246, 236],
+            textColor: [51, 51, 51],
+            fontStyle: "bold",
+            halign: "center",
+            valign: "middle",
           },
           didDrawCell: (data) => {
             // Add cell borders
