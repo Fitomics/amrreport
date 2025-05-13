@@ -139,8 +139,12 @@ class AMRCsvHandler {
     console.log("CSV Handler event listeners setup completed");
   }
 
-  handleFile(file) {
-    console.log("Handling file:", file.name);
+  handleFile(file = null) {
+    console.log("Handling file:", file?.name);
+    if (!file) {
+      this.showStatus("No file selected", true);
+      return;
+    }
     if (!this.validateFileType(file)) {
       this.showStatus("Please select a valid CSV file", true);
       return;
@@ -164,7 +168,6 @@ class AMRCsvHandler {
         }
         self.analysisData = null;
         self.analysisTablesHTML = null;
-        self.findMaxHR();
         self.previewCSV(self.csvData);
       } catch (error) {
         console.error("CSV parsing error:", error);
@@ -567,6 +570,81 @@ class AMRCsvHandler {
         }`
       );
     });
+    // ——— Fallback for Zone 1 & Zone 2 if Zone 1 has no measured CHO ———
+    const zone1 = hrZoneData.zones.find((z) => z.zoneNum === 1);
+    if (zone1 && (!zone1.choValues || zone1.choValues.length === 0)) {
+      const header = this.csvData[0];
+      const hrIdx = this.findColumnIndex(header, ["hr", "heart", "bpm"]);
+      const choIdx = this.findColumnIndex(header, ["cho", "carb"]);
+      const calIdx = this.findColumnIndex(header, ["cal", "calories"]);
+
+      // Gather (HR,CHO) for regression
+      const xCHO = [],
+        yCHO = [];
+      for (let i = 1; i < this.csvData.length; i++) {
+        const row = this.csvData[i];
+        const hr = parseFloat(row[hrIdx]);
+        const cho = parseFloat(row[choIdx]);
+        if (!isNaN(hr) && !isNaN(cho)) {
+          xCHO.push(hr);
+          yCHO.push(cho);
+        }
+      }
+
+      if (xCHO.length >= 2) {
+        // Fit CHO regression
+        const [aCHO, bCHO] = linearRegression(xCHO, yCHO);
+        const mid1 = (zone1.lowerHr + zone1.upperHr) / 2;
+
+        // Predict Zone 1
+        zone1.cho = Math.round(aCHO * mid1 + bCHO);
+        zone1.fat = Math.round(100 - zone1.cho);
+
+        console.log(
+          `Predicted Zone 1 @${mid1} bpm → CHO ${zone1.cho}%, FAT ${zone1.fat}%`
+        );
+
+        // Gather (HR,CAL) for regression
+        const xCAL = [],
+          yCAL = [];
+        if (calIdx !== -1) {
+          for (let i = 1; i < this.csvData.length; i++) {
+            const row = this.csvData[i];
+            const hrVal = parseFloat(row[hrIdx]);
+            const calVal = parseFloat(row[calIdx]);
+            if (!isNaN(hrVal) && !isNaN(calVal)) {
+              xCAL.push(hrVal);
+              yCAL.push(calVal);
+            }
+          }
+        }
+
+        let aCAL = 0,
+          bCAL = 0;
+        if (xCAL.length >= 2) {
+          [aCAL, bCAL] = linearRegression(xCAL, yCAL);
+          zone1.cal = (aCAL * mid1 + bCAL).toFixed(1);
+          console.log(`Predicted Zone 1 @${mid1} bpm → CAL ${zone1.cal}`);
+        }
+
+        // ——— Now do the exact same for Zone 2 ———
+        const zone2 = hrZoneData.zones.find((z) => z.zoneNum === 2);
+        if (zone2) {
+          const mid2 = (zone2.lowerHr + zone2.upperHr) / 2;
+          zone2.cho = Math.round(aCHO * mid2 + bCHO);
+          zone2.fat = Math.round(100 - zone2.cho);
+          console.log(
+            `Predicted Zone 2 @${mid2} bpm → CHO ${zone2.cho}%, FAT ${zone2.fat}%`
+          );
+          if (xCAL.length >= 2) {
+            zone2.cal = (aCAL * mid2 + bCAL).toFixed(1);
+            console.log(`Predicted Zone 2 @${mid2} bpm → CAL ${zone2.cal}`);
+          }
+        }
+      } else {
+        console.warn("Not enough global data to regress CHO→HR");
+      }
+    }
 
     // Update the UI with new zone data
     generateMetabolicReport();
@@ -855,9 +933,8 @@ function collectMetabolicData() {
 const formManager = {
   saveFormData() {
     try {
-      const formData = collectMetabolicData(); // Direct call to collectMetabolicData
+      const formData = collectMetabolicData(); // Collect data from the form
       localStorage.setItem("amrFormData", JSON.stringify(formData));
-      this.syncWithServer(formData);
       return formData;
     } catch (e) {
       console.error(e);
@@ -884,30 +961,6 @@ const formManager = {
       if (el) el.value = v;
     }
     generateMetabolicReport();
-  },
-  syncWithServer(formData) {
-    fetch("/api/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    })
-      .then((r) => r.json())
-      .then((d) => console.log("Server save:", d))
-      .catch(console.error);
-  },
-  loadFromServer(clientId) {
-    fetch(`/api/client/${clientId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.status === "success") {
-          this.populateForm({ ...d.client, ...d.data });
-          localStorage.setItem(
-            "amrFormData",
-            JSON.stringify({ ...d.client, ...d.data })
-          );
-        }
-      })
-      .catch(console.error);
   },
 };
 
@@ -952,7 +1005,7 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
   const pageHeight = doc.internal.pageSize.getHeight();
   const centerY = pageHeight / 2;
 
-  // Define addBackgroundImage function first
+  // Define addBackgroundImage function (unchanged)
   const addBackgroundImage = async () => {
     return new Promise((resolve) => {
       const img = new Image();
@@ -969,20 +1022,18 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
     });
   };
 
-  // Validate inputs
+  // Validation code (unchanged)
   const maxHR = parseFloat(document.getElementById("max-hr").value);
   if (isNaN(maxHR) || maxHR <= 0) {
     alert("Please enter a valid Max HR value before generating the PDF.");
     return;
   }
 
-  // Make sure we have a resting HR value
+  // HR zone calculations (unchanged)
   const minHR = parseFloat(document.getElementById("min-hr").value) || 60;
-
-  // Force recalculation of HR zones
   hrZoneData.calculateHrRanges(maxHR);
 
-  // Double-check zones calculation
+  // Double-check zones calculation (unchanged)
   if (hrZoneData.zones[0].lowerHr === 0 && hrZoneData.zones[0].upperHr === 0) {
     hrZoneData.zones.forEach((zone) => {
       zone.lowerHr = Math.round(maxHR * zone.lowerPercent);
@@ -993,53 +1044,43 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
   try {
     // Title page
     await addBackgroundImage();
-    doc
-      .setFont("GlacialIndifference", "normal")
-      .setFontSize(24)
-      .setTextColor("#333333")
+
+    // Title page text - using helper function
+    pdfHelpers
+      .setTextStyle(doc, { fontSize: 24 })
       .text("Heart Rate Zones and Fat Max", pageWidth / 2, centerY - 20, {
         align: "center",
       });
 
-    doc
-      .setFont("GlacialIndifference", "normal")
-      .setFontSize(14)
+    pdfHelpers
+      .setTextStyle(doc, { fontSize: 14 })
       .text(
         `Client: ${document.getElementById("first-name").value || ""} ${
           document.getElementById("last-name").value || ""
         }`,
         pageWidth / 2,
         centerY + 30,
-        {
-          align: "center",
-        }
+        { align: "center" }
       );
 
     doc.text(
-      `Date: ${new Date(
-        document.getElementById("test-date").value || new Date()
-      ).toLocaleDateString()}`,
+      `Date: ${(() => {
+        const dateInput = document.getElementById("test-date").value;
+        if (!dateInput) return new Date().toLocaleDateString();
+
+        // Simply format the date string directly without timezone conversion
+        return new Date(dateInput.replace(/-/g, "/")).toLocaleDateString();
+      })()}`,
       pageWidth / 2,
       centerY + 50,
-      {
-        align: "center",
-      }
+      { align: "center" }
     );
 
     // HR Zones page with background
     doc.addPage();
     await addBackgroundImage();
 
-    // Title for HR Zones
-    doc
-      .setFont("GlacialIndifference", "normal")
-      .setFontSize(18)
-      .setTextColor("#333333")
-      .text("HR Training Zones", pageWidth / 2, 100, {
-        align: "center",
-      });
-
-    // Create HR zones table with guaranteed values
+    // Create HR zones table with helper function
     const zoneHeaders = [
       ["Zone", "Heart Rate Range", "CHO %", "FAT %", "Cal/min"],
     ];
@@ -1051,142 +1092,56 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
       zone.cal || "N/A",
     ]);
 
-    // Apply custom styling to match page CSS
-    doc.autoTable({
-      head: zoneHeaders,
-      body: zoneRows,
+    // Using the helper function to create the table with a title
+    pdfHelpers.createTable(doc, {
+      headers: zoneHeaders,
+      rows: zoneRows,
       startY: 130,
-      margin: { left: 80, right: 80 },
-      styles: {
-        textColor: [51, 51, 51],
-        fontSize: 12,
-        cellPadding: 8,
-      },
-      headStyles: {
-        fillColor: [253, 246, 236],
-        textColor: [51, 51, 51],
-        fontStyle: "bold",
-      },
-      columnStyles: {
-        0: { cellWidth: "auto" },
-        1: { cellWidth: "auto" },
-        2: { cellWidth: "auto" },
-        3: { cellWidth: "auto" },
-        4: { cellWidth: "auto" },
-      },
-      didDrawCell: (data) => {
-        // Add cell borders
-        if (data.section === "body" || data.section === "head") {
-          const { x, y, width, height } = data.cell;
-          doc.setDrawColor(193, 153, 98); // #c19962
-          doc.setLineWidth(0.5);
-          doc.rect(x, y, width, height);
-        }
-      },
+      title: "HR Training Zones",
+      titleY: 100,
     });
 
-    // Show Fat Max information
-    doc.setFontSize(12);
+    // Fat Max table with helper
     const fatMaxGrams = document.getElementById("fat-max-grams").value || "N/A";
     const fatMaxHr = document.getElementById("fat-max-hr").value || "N/A";
-
-    // Create a table for Fat Max data instead of a single text line
     const fatMaxHeaders = [["Fat Max Data"]];
     const fatMaxRows = [
       [`Max Fat Oxidation: ${fatMaxGrams} g/min @ ${fatMaxHr} bpm`],
     ];
 
-    doc.autoTable({
-      head: fatMaxHeaders,
-      body: fatMaxRows,
-      startY: 340, // Moved down to match the new title position
-      margin: { left: 80, right: 80 },
-      styles: {
-        textColor: [51, 51, 51],
-        fontSize: 12,
-        cellPadding: 8,
-        halign: "center",
-      },
-      headStyles: {
-        fillColor: [253, 246, 236],
-        textColor: [51, 51, 51],
-        fontStyle: "bold",
-        halign: "center",
-      },
-      columnStyles: {
-        0: { cellWidth: "auto" },
-      },
-      didDrawCell: (data) => {
-        // Add cell borders
-        if (data.section === "body" || data.section === "head") {
-          const { x, y, width, height } = data.cell;
-          doc.setDrawColor(193, 153, 98); // #c19962
-          doc.setLineWidth(0.5);
-          doc.rect(x, y, width, height);
-        }
-      },
+    pdfHelpers.createTable(doc, {
+      headers: fatMaxHeaders,
+      rows: fatMaxRows,
+      startY: 340,
     });
 
-    // Add client information and other analysis if available
+    // Analysis page if available
     if (window.AMRCsvHandler && window.AMRCsvHandler.analysisData) {
       // Analysis tables page with background
       doc.addPage();
       await addBackgroundImage();
 
       const analysisData = window.AMRCsvHandler.analysisData;
-
-      // Define page and table dimensions ONCE for the entire page
-      const pageWidth = doc.internal.pageSize.getWidth();
       const tableWidth = pageWidth - 160; // 80px margin on each side
       const columnWidth = tableWidth / 2; // Equal width for each column
+      const columnWidths = [columnWidth, columnWidth];
 
-      // Add VO2 Analysis Table
+      // VO2 Analysis Tables
       if (analysisData.topVo2 && analysisData.topVo2.length) {
-        // Main VO2 Analysis table with just the data points
         const vo2Headers = [["VO2 (ml/kg/min)", "HR"]];
         const vo2Rows = analysisData.topVo2.map((row) => [
           typeof row.vo2 === "number" ? row.vo2.toFixed(1) : "-",
           typeof row.hr === "number" ? row.hr.toFixed(0) : "-",
         ]);
 
-        doc.setFontSize(18);
-        doc.setTextColor("#333333");
-        doc.setFont("GlacialIndifference", "normal");
-        doc.text("VO2 Analysis", pageWidth / 2, 80, { align: "center" });
-
-        // First table uses the shared dimensions
-        doc.autoTable({
-          head: vo2Headers,
-          body: vo2Rows,
+        // First VO2 table
+        pdfHelpers.createTable(doc, {
+          headers: vo2Headers,
+          rows: vo2Rows,
           startY: 95,
-          margin: { left: 80, right: 80 },
-          styles: {
-            textColor: [51, 51, 51],
-            fontSize: 12,
-            cellPadding: 8,
-            halign: "center",
-            valign: "middle",
-          },
-          headStyles: {
-            fillColor: [253, 246, 236],
-            textColor: [51, 51, 51],
-            fontStyle: "bold",
-            halign: "center",
-            valign: "middle",
-          },
-          columnStyles: {
-            0: { cellWidth: columnWidth },
-            1: { cellWidth: columnWidth },
-          },
-          didDrawCell: (data) => {
-            // Add cell borders
-            if (data.section === "body" || data.section === "head") {
-              const { x, y, width, height } = data.cell;
-              doc.setDrawColor(193, 153, 98); // #c19962
-              doc.setLineWidth(0.5);
-              doc.rect(x, y, width, height);
-            }
-          },
+          title: "VO2 Analysis",
+          titleY: 80,
+          columnWidths: columnWidths,
         });
 
         // Get the final Y position of the first table
@@ -1196,134 +1151,49 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
         const avgHeaders = [["Avg VO2 Max", "Avg HR"]];
         const avgRows = [[analysisData.avgVo2, analysisData.avgVo2Hr]];
 
-        // Second table also uses the same dimensions
-        doc.autoTable({
-          head: avgHeaders,
-          body: avgRows,
+        pdfHelpers.createTable(doc, {
+          headers: avgHeaders,
+          rows: avgRows,
           startY: firstTableEndY,
-          margin: { left: 80, right: 80 },
-          styles: {
-            textColor: [51, 51, 51],
-            fontSize: 12,
-            cellPadding: 8,
-            halign: "center",
-            valign: "middle",
-          },
-          headStyles: {
-            fillColor: [253, 246, 236],
-            textColor: [51, 51, 51],
-            fontStyle: "bold",
-            halign: "center",
-            valign: "middle",
-          },
-          columnStyles: {
-            0: { cellWidth: columnWidth },
-            1: { cellWidth: columnWidth },
-          },
-          didDrawCell: (data) => {
-            // Add cell borders
-            if (data.section === "body" || data.section === "head") {
-              const { x, y, width, height } = data.cell;
-              doc.setDrawColor(193, 153, 98); // #c19962
-              doc.setLineWidth(0.5);
-              doc.rect(x, y, width, height);
-            }
-          },
+          columnWidths: columnWidths,
         });
       }
 
-      // Add Fat Oxidation Analysis Table - already has access to the same dimensions
+      // Fat Oxidation Analysis Tables
       if (analysisData.topFat && analysisData.topFat.length) {
-        // Main Fat Oxidation analysis table with just the data points
         const fatHeaders = [["Fat (g/min)", "HR"]];
         const fatRows = analysisData.topFat.map((row) => [
           typeof row.fatGMin === "number" ? row.fatGMin.toFixed(2) : "-",
           typeof row.hr === "number" ? row.hr : "-",
         ]);
 
-        doc.setFontSize(18);
-        doc.setTextColor("#333333");
-        doc.setFont("GlacialIndifference", "normal");
-        doc.text("Fat Oxidation Analysis", pageWidth / 2, 390, {
-          align: "center",
-        });
-
-        // Calculate column widths for consistent size
-
-        doc.autoTable({
-          head: fatHeaders,
-          body: fatRows,
+        // First fat table
+        pdfHelpers.createTable(doc, {
+          headers: fatHeaders,
+          rows: fatRows,
           startY: 400,
-          margin: { left: 80, right: 80 },
-          styles: {
-            textColor: [51, 51, 51],
-            fontSize: 12,
-            cellPadding: 8,
-            halign: "center",
-            valign: "middle",
-          },
-          headStyles: {
-            fillColor: [253, 246, 236],
-            textColor: [51, 51, 51],
-            fontStyle: "bold",
-            halign: "center",
-            valign: "middle",
-          },
-          columnStyles: {
-            0: { cellWidth: columnWidth },
-            1: { cellWidth: columnWidth },
-          },
-          didDrawCell: (data) => {
-            // Add cell borders
-            if (data.section === "body" || data.section === "head") {
-              const { x, y, width, height } = data.cell;
-              doc.setDrawColor(193, 153, 98); // #c19962
-              doc.setLineWidth(0.5);
-              doc.rect(x, y, width, height);
-            }
-          },
+          title: "Fat Oxidation Analysis",
+          titleY: 390,
+          columnWidths: columnWidths,
         });
 
-        // Get the final Y position of the fat table
+        // Get the final Y position
         const fatTableEndY = doc.previousAutoTable.finalY + 20;
 
-        // Second table for average fat values
+        // Average fat values table
         const avgFatHeaders = [["Avg Fat", "Avg HR"]];
         const avgFatRows = [[analysisData.avgFatGMin, analysisData.avgFatHr]];
 
-        doc.autoTable({
-          head: avgFatHeaders,
-          body: avgFatRows,
-          startY: fatTableEndY, // Position it 20 points below the fat table
-          margin: { left: 80, right: 80 },
-          styles: {
-            textColor: [51, 51, 51],
-            fontSize: 12,
-            cellPadding: 8,
-            halign: "center",
-            valign: "middle",
-          },
-          headStyles: {
-            fillColor: [253, 246, 236],
-            textColor: [51, 51, 51],
-            fontStyle: "bold",
-            halign: "center",
-            valign: "middle",
-          },
-          didDrawCell: (data) => {
-            // Add cell borders
-            if (data.section === "body" || data.section === "head") {
-              const { x, y, width, height } = data.cell;
-              doc.setDrawColor(193, 153, 98); // #c19962
-              doc.setLineWidth(0.5);
-              doc.rect(x, y, width, height);
-            }
-          },
+        pdfHelpers.createTable(doc, {
+          headers: avgFatHeaders,
+          rows: avgFatRows,
+          startY: fatTableEndY,
+          columnWidths: columnWidths,
         });
       }
     }
 
-    // Save the PDF
+    // Save the PDF (unchanged)
     const firstName = document.getElementById("first-name").value || "Client";
     const lastName = document.getElementById("last-name").value || "Report";
     doc.save(`${firstName}_${lastName}_Metabolic_Report.pdf`);
@@ -1332,6 +1202,113 @@ document.getElementById("download-pdf").addEventListener("click", async () => {
     alert("Error generating PDF: " + error.message);
   }
 });
+
+// PDF styling helper functions
+const pdfHelpers = {
+  // Set standard text styling
+  setTextStyle(doc, options = {}) {
+    const {
+      fontSize = 12,
+      fontStyle = "normal",
+      textColor = "#333333",
+    } = options;
+
+    doc
+      .setFont("GlacialIndifference", fontStyle)
+      .setFontSize(fontSize)
+      .setTextColor(textColor);
+
+    return doc;
+  },
+
+  // Create a styled table with consistent formatting
+  createTable(doc, options = {}) {
+    const {
+      headers,
+      rows,
+      startY,
+      title = null,
+      titleFontSize = 18,
+      titleY = null,
+      columnWidths = null,
+    } = options;
+
+    // Add title if provided
+    if (title) {
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const y = titleY || startY - 20;
+
+      this.setTextStyle(doc, { fontSize: titleFontSize }).text(
+        title,
+        pageWidth / 2,
+        y,
+        { align: "center" }
+      );
+    }
+
+    // Generate column styles based on provided widths or auto
+    const columnStyles = {};
+    if (columnWidths) {
+      columnWidths.forEach((width, i) => {
+        columnStyles[i] = { cellWidth: width };
+      });
+    } else {
+      headers[0].forEach((_, i) => {
+        columnStyles[i] = { cellWidth: "auto" };
+      });
+    }
+
+    return doc.autoTable({
+      head: headers,
+      body: rows,
+      startY: startY,
+      margin: { left: 80, right: 80 },
+      styles: {
+        textColor: [51, 51, 51],
+        fontSize: 12,
+        cellPadding: 8,
+        halign: "center",
+        valign: "middle",
+      },
+      headStyles: {
+        fillColor: [253, 246, 236],
+        textColor: [51, 51, 51],
+        fontStyle: "bold",
+        halign: "center",
+        valign: "middle",
+      },
+      columnStyles: columnStyles,
+      didDrawCell: (data) => {
+        // Add cell borders
+        if (data.section === "body" || data.section === "head") {
+          const { x, y, width, height } = data.cell;
+          doc.setDrawColor(193, 153, 98); // #c19962
+          doc.setLineWidth(0.5);
+          doc.rect(x, y, width, height);
+        }
+      },
+    });
+  },
+};
+
+function linearRegression(x, y) {
+  const n = x.length;
+  let sumX = 0,
+    sumY = 0,
+    sumXY = 0,
+    sumXX = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += x[i];
+    sumY += y[i];
+    sumXY += x[i] * y[i];
+    sumXX += x[i] * x[i];
+  }
+  const denom = n * sumXX - sumX * sumX;
+  if (denom === 0) return [0, 0];
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  return [slope, intercept];
+}
 
 // Store zone data in a JS object instead of hidden DOM inputs
 const hrZoneData = {
