@@ -844,11 +844,6 @@ function generateMetabolicReport() {
 
   // Start with VO2 and Fat Max data sections
   let html = `
-    <div><h5>VO2 Max</h5><p><strong>METs:</strong> ${d.vo2mets} | <strong>ml/kg/min:</strong> ${d.vo2ml}</p></div>
-    <div><h5>Fat Max</h5><p><strong>Max Fat Ox:</strong> ${d.fatmaxgrams} g/min @ ${d.fatmaxhr} bpm</p></div>`;
-
-  // Add HR Zones table with consistent styling from updateZonesDisplay
-  html += `
     <div class="zone-display">
       <h5>HR Training Zones</h5>
       <table class="zone-table">
